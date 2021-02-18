@@ -2,11 +2,14 @@ package lib
 
 import (
 	"fmt"
-	"time"
-	hm "github.com/dustin/go-humanize"
-	tm "github.com/buger/goterm"
+	"io/ioutil"
 	"math"
+	"strings"
+	"time"
+
+	tm "github.com/buger/goterm"
 	"github.com/cznic/mathutil"
+	hm "github.com/dustin/go-humanize"
 )
 
 const (
@@ -15,30 +18,36 @@ const (
 
 var (
 	reporter = new(Reporter)
+	output   = ""
 )
+
+func SetOutput(val string) {
+	output = val
+}
 
 func GetReporter() *Reporter {
 	return reporter
 }
 
 type Reporter struct {
-	Debug bool `yaml:"debug"`
+	Debug  bool   `yaml:"debug"`
+	Output string `yaml:"output"`
 }
 
-func (this *Reporter) log(message string, args ...interface{}) {
-	if this.Debug {
+func (r *Reporter) log(message string, args ...interface{}) {
+	if r.Debug {
 		message = fmt.Sprintf(message, args...)
 		fmt.Println(message)
 	}
 }
 
-func (this *Reporter) ln() {
-	this.log(EMPTY_SIGN)
+func (r *Reporter) ln() {
+	r.log(EMPTY_SIGN)
 }
 
-func (this *Reporter) report(kill *Kill, hits <- chan *Hit) {
+func (r *Reporter) report(kill *Kill, hits <-chan *Hit) {
 	var startTime int64
-	var endTime   int64
+	var endTime int64
 	requestsPerSeconds := make(map[int64]map[int]int)
 	reports := make(map[int]*ShotReport)
 	hitsTable := tm.NewTable(0, 0, 2, ' ', 0)
@@ -71,12 +80,12 @@ func (this *Reporter) report(kill *Kill, hits <- chan *Hit) {
 		}
 	}
 
-	var totalRequests          int
-	var completeRequests       int
-	var failedRequests         int
-	var availability           float64
+	var totalRequests int
+	var completeRequests int
+	var failedRequests int
+	var availability float64
 	var totalRequestPerSeconds float64
-	var totalTransferred       int64
+	var totalTransferred int64
 
 	reportsCount := float64(len(reports))
 	cartridges := kill.gun.Cartridges.toPlainSlice()
@@ -84,8 +93,8 @@ func (this *Reporter) report(kill *Kill, hits <- chan *Hit) {
 
 		if report, ok := reports[cartridge.id]; ok {
 			counts := make([]int, 0)
-			for _, countById := range requestsPerSeconds {
-				if count, ok := countById[cartridge.id]; ok {
+			for _, countByID := range requestsPerSeconds {
+				if count, ok := countByID[cartridge.id]; ok {
 					counts = append(counts, count)
 				}
 			}
@@ -108,7 +117,7 @@ func (this *Reporter) report(kill *Kill, hits <- chan *Hit) {
 			}
 			avgRequestPerSecond = avgRequestPerSecond / float64(len(counts))
 
-			name := this.getRequestName(cartridge)
+			name := r.getRequestName(cartridge)
 			totalRequests += report.totalRequests
 			completeRequests += report.completeRequests
 			failedRequests += report.failedRequests
@@ -139,23 +148,43 @@ func (this *Reporter) report(kill *Kill, hits <- chan *Hit) {
 	fmt.Fprintf(targetTable, "Server Hostname:\t%s\n", kill.victim.Host)
 	fmt.Fprintf(targetTable, "Server Port:\t%d\n", kill.victim.Port)
 	fmt.Fprintf(targetTable, "Concurrency Level:\t%d\n", kill.GunsCount)
+	fmt.Fprintf(targetTable, "Rate per second:\t%d\n", kill.Rate)
 	fmt.Fprintf(targetTable, "Loop count:\t%d\n", kill.AttemptsCount)
 	fmt.Fprintf(targetTable, "Timeout:\t%d seconds\n", kill.Timeout)
 	fmt.Fprintf(targetTable, "Time taken for tests:\t%d seconds\n", int(time.Unix(endTime, 0).Sub(time.Unix(startTime, 0)).Seconds()))
 	fmt.Fprintf(targetTable, "Total requests:\t%d\n", totalRequests)
 	fmt.Fprintf(targetTable, "Complete requests:\t%d\n", completeRequests)
 	fmt.Fprintf(targetTable, "Failed requests:\t%d\n", failedRequests)
-	fmt.Fprintf(targetTable, "Availability:\t%.2f%%\n", availability / reportsCount)
-	fmt.Fprintf(targetTable, "Requests per second:\t~ %.2f\n", totalRequestPerSeconds / float64(len(cartridges)))
+	fmt.Fprintf(targetTable, "Availability:\t%.2f%%\n", availability/reportsCount)
+	fmt.Fprintf(targetTable, "Requests per second:\t~ %.2f\n", totalRequestPerSeconds/float64(len(cartridges)))
 	fmt.Fprintf(targetTable, "Total transferred:\t%s\n", hm.Bytes(uint64(totalTransferred)))
 
 	fmt.Println(EMPTY_SIGN)
 	fmt.Println(EMPTY_SIGN)
 	fmt.Println(targetTable)
 	fmt.Println(hitsTable)
+
+	if r.Output != "" || output != "" {
+
+		op := r.Output
+		if output != "" {
+			op = output
+		}
+
+		var b strings.Builder
+		fmt.Fprintln(&b, targetTable)
+		fmt.Fprintln(&b, hitsTable)
+
+		err := ioutil.WriteFile(op, []byte(b.String()), 0644)
+		if err != nil {
+			fmt.Printf("Problem writing report to file %s, %v\n", op, err)
+		} else {
+			fmt.Printf("Wrote report to file %s\n", op)
+		}
+	}
 }
 
-func (this *Reporter) getRequestName(cartridge *Cartridge) string {
+func (r *Reporter) getRequestName(cartridge *Cartridge) string {
 	return fmt.Sprintf("%s %s", cartridge.getMethod(), cartridge.path.rawDescription)
 }
 
@@ -190,27 +219,27 @@ func (this *ShotReport) create(hit *Hit) *ShotReport {
 	return this
 }
 
-func (this *ShotReport) getDiffSeconds(hit *Hit) float64 {
+func (sr *ShotReport) getDiffSeconds(hit *Hit) float64 {
 	return hit.endTime.Sub(hit.startTime).Seconds()
 }
 
-func (this *ShotReport) checkResponseStatusCode(hit *Hit) {
+func (sr *ShotReport) checkResponseStatusCode(hit *Hit) {
 	shot := hit.shot
 	if hit.shot.request != nil && hit.response != nil {
 		statusCode := hit.response.StatusCode
-		if this.inArray(statusCode, shot.cartridge.failedStatusCodes) {
-			this.failedRequests++
-		} else if this.inArray(statusCode, shot.cartridge.successStatusCodes) {
-			this.completeRequests++
+		if sr.inArray(statusCode, shot.cartridge.failedStatusCodes) {
+			sr.failedRequests++
+		} else if sr.inArray(statusCode, shot.cartridge.successStatusCodes) {
+			sr.completeRequests++
 		} else {
-			this.failedRequests++
+			sr.failedRequests++
 		}
 	} else {
-		this.failedRequests++
+		sr.failedRequests++
 	}
 }
 
-func (this *ShotReport) inArray(a int, array []int) bool {
+func (sr *ShotReport) inArray(a int, array []int) bool {
 	for _, b := range array {
 		if a == b {
 			return true
@@ -219,47 +248,47 @@ func (this *ShotReport) inArray(a int, array []int) bool {
 	return false
 }
 
-func (this *ShotReport) updateTotalRequests() {
-	this.totalRequests++
+func (sr *ShotReport) updateTotalRequests() {
+	sr.totalRequests++
 }
 
-func (this *ShotReport) updateTotalTransferred(hit *Hit) {
+func (sr *ShotReport) updateTotalTransferred(hit *Hit) {
 	if hit.response != nil {
-		this.totalTransferred += int64(len(hit.responseBody))
-		if this.contentLength == 0 {
-			this.contentLength = this.totalTransferred
+		sr.totalTransferred += int64(len(hit.responseBody))
+		if sr.contentLength == 0 {
+			sr.contentLength = sr.totalTransferred
 		}
 	}
 }
 
-func (this *ShotReport) updateRequestsPerSecond(timeRequest float64) {
+func (sr *ShotReport) updateRequestsPerSecond(timeRequest float64) {
 	if timeRequest == 0 {
 		timeRequest = 1
 	}
-	if this.requestsPerSecond == 0 {
-		this.requestsPerSecond = 1 / timeRequest
+	if sr.requestsPerSecond == 0 {
+		sr.requestsPerSecond = 1 / timeRequest
 	} else {
-		this.requestsPerSecond = ((1 / timeRequest) + this.requestsPerSecond) / 2
+		sr.requestsPerSecond = ((1 / timeRequest) + sr.requestsPerSecond) / 2
 	}
-	reporter.log("time request: %v, requests per second: %v, avg requests per second: %v", timeRequest, 1 / timeRequest, this.requestsPerSecond)
+	reporter.log("time request: %v, requests per second: %v, avg requests per second: %v", timeRequest, 1/timeRequest, sr.requestsPerSecond)
 }
 
-func (this *ShotReport) update(hit *Hit) *ShotReport {
-	timeRequest := this.getDiffSeconds(hit)
-	this.minTime = math.Min(this.minTime, timeRequest)
-	this.maxTime = math.Max(this.maxTime, timeRequest)
-	this.totalTime += timeRequest
-	this.updateTotalRequests()
-	this.updateTotalTransferred(hit)
-	this.checkResponseStatusCode(hit)
-	this.endTime = hit.endTime
-	return this
+func (sr *ShotReport) update(hit *Hit) *ShotReport {
+	timeRequest := sr.getDiffSeconds(hit)
+	sr.minTime = math.Min(sr.minTime, timeRequest)
+	sr.maxTime = math.Max(sr.maxTime, timeRequest)
+	sr.totalTime += timeRequest
+	sr.updateTotalRequests()
+	sr.updateTotalTransferred(hit)
+	sr.checkResponseStatusCode(hit)
+	sr.endTime = hit.endTime
+	return sr
 }
 
-func (this *ShotReport) getAvgTime() float64 {
-	return (this.minTime + this.maxTime) / 2
+func (sr *ShotReport) getAvgTime() float64 {
+	return (sr.minTime + sr.maxTime) / 2
 }
 
-func (this *ShotReport) getAvailability() float64 {
-	return float64(this.completeRequests) * 100 / float64(this.totalRequests)
+func (sr *ShotReport) getAvailability() float64 {
+	return float64(sr.completeRequests) * 100 / float64(sr.totalRequests)
 }

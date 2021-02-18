@@ -1,4 +1,4 @@
-module github.com/byorty/mgun
+module github.com/imarsman/mgun
 
 go 1.14
 
@@ -9,6 +9,8 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
+	github.com/uber-go/ratelimit v0.1.0 // indirect
+	go.uber.org/ratelimit v0.1.1-0.20210125012240-296e9dcf0255
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
 	gopkg.in/VividCortex/ewma.v1 v1.1.1 // indirect
 	gopkg.in/cheggaaa/pb.v2 v2.0.7 // indirect

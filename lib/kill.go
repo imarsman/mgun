@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/cheggaaa/pb"
-	"golang.org/x/net/publicsuffix"
 	"io/ioutil"
 	"mime/multipart"
 	"net"
@@ -17,69 +15,92 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cheggaaa/pb"
+	"go.uber.org/ratelimit"
+	"golang.org/x/net/publicsuffix"
 )
 
 var (
 	kill = &Kill{shotsCount: 0}
+	rl   ratelimit.Limiter
 )
 
+// Kill a collection of properties for a set of hits
 type Kill struct {
 	shotsCount    int
 	GunsCount     int           `yaml:"concurrency"`
 	AttemptsCount int           `yaml:"loopCount"`
 	Timeout       time.Duration `yaml:"timeout"`
+	Rate          int           `yaml:"ratepersecond"`
 	gun           *Gun
 	victim        *Victim
 }
 
+// GetKill get collection of properties for a set of hits
 func GetKill() *Kill {
 	return kill
 }
 
-func (this *Kill) SetGun(gun *Gun) {
-	this.gun = gun
+// SetGun set target for a call
+func (k *Kill) SetGun(gun *Gun) {
+	k.gun = gun
 }
 
-func (this *Kill) SetVictim(victim *Victim) {
-	this.victim = victim
+// SetVictim set target for hits
+func (k *Kill) SetVictim(victim *Victim) {
+	k.victim = victim
 }
 
-func (this *Kill) Prepare() error {
+// Prepare get ready to hit targets
+func (k *Kill) Prepare() error {
 	reporter.ln()
 	reporter.log("prepare kill")
 
-	err := this.victim.prepare()
-	this.gun.prepare()
+	err := k.victim.prepare()
+	k.gun.prepare()
 
-	if this.GunsCount == 0 {
-		this.GunsCount = 1
+	if k.GunsCount == 0 {
+		k.GunsCount = 1
 	}
-	reporter.log("guns count - %v", this.GunsCount)
+	reporter.log("guns count - %v", k.GunsCount)
 
-	if this.AttemptsCount == 0 {
-		this.AttemptsCount = 1
+	if k.AttemptsCount == 0 {
+		k.AttemptsCount = 1
 	}
-	reporter.log("attempts count - %v", this.AttemptsCount)
+	reporter.log("attempts count - %v", k.AttemptsCount)
 
-	if this.Timeout == 0 {
-		this.Timeout = 2
+	if k.Timeout == 0 {
+		k.Timeout = 2
 	}
-	reporter.log("timeout - %v", this.GunsCount)
-	reporter.log("shots count - %v", this.shotsCount)
+	if k.Rate == 0 {
+		k.Rate = 1000
+	}
+	reporter.log("timeout - %v", k.GunsCount)
+	reporter.log("shots count - %v", k.shotsCount)
 
 	return err
 }
 
-func (this *Kill) Start() {
+// Start begin a set of hits
+func (k *Kill) Start() {
+	rate := k.Rate
+
+	rl = ratelimit.New(rate, ratelimit.WithoutSlack)
+	if k.Rate == 1000 {
+		rl = ratelimit.NewUnlimited()
+	}
+	// fmt.Println("Rate", rate)
+
 	reporter.ln()
 	reporter.log("start kill")
 
 	// отдаем рутинам все ядра процессора
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	// считаем кол-во результатов
-	hitsCount := this.GunsCount * this.AttemptsCount * this.shotsCount
+	hitsCount := k.GunsCount * k.AttemptsCount * k.shotsCount
 	reporter.log("hits count: %v", hitsCount)
-	hitsByAttempt := hitsCount / this.AttemptsCount
+	hitsByAttempt := hitsCount / k.AttemptsCount
 	reporter.log("hits by attempt: %v", hitsByAttempt)
 
 	// создаем програсс бар
@@ -91,17 +112,18 @@ func (this *Kill) Start() {
 	// запускаем повторения заданий,
 	// если в настройках не указано кол-во повторений,
 	// тогда программа сделает одно повторение
-	for i := 0; i < this.AttemptsCount; i++ {
+	for i := 0; i < k.AttemptsCount; i++ {
 		reporter.log("attempt - %v", i)
 		group.Add(hitsByAttempt)
 		// запускаем конкуретные задания,
 		// если в настройках не указано кол-во заданий,
 		// тогда программа сделает одно задание
-		for j := 0; j < this.GunsCount; j++ {
+		for j := 0; j < k.GunsCount; j++ {
 			go func() {
+				// Get new rate limit token
 				killer := new(Killer)
-				killer.setVictim(this.victim)
-				killer.setGun(this.gun)
+				killer.setVictim(k.victim)
+				killer.setGun(k.gun)
 
 				go killer.fire(hits, shots, group, bar)
 				reporter.log("killer - %v charge", j)
@@ -114,9 +136,10 @@ func (this *Kill) Start() {
 	close(shots)
 	close(hits)
 	// аггрегируем результаты задания и выводим статистику в консоль
-	reporter.report(this, hits)
+	reporter.report(k, hits)
 }
 
+// Shot definition of properties required for a call to a target
 type Shot struct {
 	cartridge *Cartridge
 	request   *http.Request
@@ -124,21 +147,23 @@ type Shot struct {
 	transport *http.Transport
 }
 
+// Killer definition of
 type Killer struct {
 	victim  *Victim
 	gun     *Gun
 	session *Caliber
 }
 
-func (this *Killer) setVictim(victim *Victim) {
-	this.victim = victim
+func (k *Killer) setVictim(victim *Victim) {
+	k.victim = victim
 }
 
-func (this *Killer) setGun(gun *Gun) {
-	this.gun = gun
+func (k *Killer) setGun(gun *Gun) {
+	k.gun = gun
 }
 
-func (this *Killer) charge(shots chan *Shot) {
+func (k *Killer) charge(shots chan *Shot) {
+
 	options := cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	}
@@ -148,14 +173,14 @@ func (this *Killer) charge(shots chan *Shot) {
 	}
 	client := new(http.Client)
 	client.Jar = jar
-	this.chargeCartidges(shots, client, this.gun.Cartridges)
+	k.chargeCartidges(shots, client, k.gun.Cartridges)
 }
 
-func (this *Killer) chargeCartidges(shots chan<- *Shot, client *http.Client, cartridges Cartridges) {
+func (k *Killer) chargeCartidges(shots chan<- *Shot, client *http.Client, cartridges Cartridges) {
 
 	for _, cartridge := range cartridges {
 		if cartridge.getMethod() == RANDOM_METHOD || cartridge.getMethod() == SYNC_METHOD {
-			this.chargeCartidges(shots, client, cartridge.getChildren())
+			k.chargeCartidges(shots, client, cartridge.getChildren())
 		} else {
 			isPostRequest := cartridge.getMethod() == POST_METHOD
 			var timeout time.Duration
@@ -176,31 +201,31 @@ func (this *Killer) chargeCartidges(shots chan<- *Shot, client *http.Client, car
 				DisableKeepAlives:     true,
 			}
 
-			reqUrl := new(url.URL)
-			reqUrl.Scheme = this.victim.Scheme
-			reqUrl.Host = this.victim.Host
+			reqURL := new(url.URL)
+			reqURL.Scheme = k.victim.Scheme
+			reqURL.Host = k.victim.Host
 
-			pathParts := strings.Split(cartridge.getPathAsString(this), "?")
-			reqUrl.Path = pathParts[0]
+			pathParts := strings.Split(cartridge.getPathAsString(k), "?")
+			reqURL.Path = pathParts[0]
 			if len(pathParts) == 2 {
 				val, _ := url.ParseQuery(pathParts[1])
-				reqUrl.RawQuery = val.Encode()
+				reqURL.RawQuery = val.Encode()
 			} else {
-				reqUrl.RawQuery = ""
+				reqURL.RawQuery = ""
 			}
 
 			var body bytes.Buffer
-			request, err := http.NewRequest(cartridge.getMethod(), reqUrl.String(), &body)
+			request, err := http.NewRequest(cartridge.getMethod(), reqURL.String(), &body)
 			if err == nil {
-				this.setFeatures(request, this.gun.Features)
-				this.setFeatures(request, cartridge.bulletFeatures)
+				k.setFeatures(request, k.gun.Features)
+				k.setFeatures(request, cartridge.bulletFeatures)
 				if isPostRequest {
 
 					switch request.Header.Get("Content-Type") {
 					case "multipart/form-data":
 						writer := multipart.NewWriter(&body)
 						for _, feature := range cartridge.chargeFeatures {
-							writer.WriteField(feature.name, feature.String(this))
+							writer.WriteField(feature.name, feature.String(k))
 						}
 						writer.Close()
 						request.Body = ioutil.NopCloser(bytes.NewReader(body.Bytes()))
@@ -209,7 +234,7 @@ func (this *Killer) chargeCartidges(shots chan<- *Shot, client *http.Client, car
 					case "application/json":
 						for _, feature := range cartridge.chargeFeatures {
 							if feature.name == "raw_body" {
-								body.WriteString(feature.String(this))
+								body.WriteString(feature.String(k))
 							}
 						}
 						request.Body = ioutil.NopCloser(bytes.NewReader(body.Bytes()))
@@ -218,7 +243,7 @@ func (this *Killer) chargeCartidges(shots chan<- *Shot, client *http.Client, car
 					default:
 						params := url.Values{}
 						for _, feature := range cartridge.chargeFeatures {
-							params.Set(feature.name, feature.String(this))
+							params.Set(feature.name, feature.String(k))
 						}
 						body.WriteString(params.Encode())
 						request.Body = ioutil.NopCloser(bytes.NewReader(body.Bytes()))
@@ -245,14 +270,16 @@ func (this *Killer) chargeCartidges(shots chan<- *Shot, client *http.Client, car
 	}
 }
 
-func (this *Killer) setFeatures(request *http.Request, features Features) {
+func (k *Killer) setFeatures(request *http.Request, features Features) {
 	for _, feature := range features {
-		request.Header.Set(feature.name, feature.String(this))
+		request.Header.Set(feature.name, feature.String(k))
 	}
 }
 
-func (this *Killer) fire(hits chan<- *Hit, shots <-chan *Shot, group *sync.WaitGroup, bar *pb.ProgressBar) {
+func (k *Killer) fire(hits chan<- *Hit, shots <-chan *Shot, group *sync.WaitGroup, bar *pb.ProgressBar) {
 	for shot := range shots {
+		rl.Take()
+
 		hit := new(Hit)
 		hit.shot = shot
 		shot.client.Transport = shot.transport
@@ -299,29 +326,29 @@ func NewVictim() *Victim {
 	return new(Victim)
 }
 
-func (this *Victim) prepare() error {
-	if len(this.Scheme) > 0 && (this.Scheme != HTTP_SCHEME && this.Scheme != HTTPS_SCHEME) {
+func (v *Victim) prepare() error {
+	if len(v.Scheme) > 0 && (v.Scheme != HTTP_SCHEME && v.Scheme != HTTPS_SCHEME) {
 		return errors.New("invalid scheme")
 	}
 
-	if len(this.Host) == 0 {
+	if len(v.Host) == 0 {
 		return errors.New("invalid host")
 	}
 
-	if len(this.Scheme) == 0 {
-		this.Scheme = HTTP_SCHEME
+	if len(v.Scheme) == 0 {
+		v.Scheme = HTTP_SCHEME
 	}
-	reporter.log("scheme - %v", this.Scheme)
+	reporter.log("scheme - %v", v.Scheme)
 
-	if this.Port == 0 {
-		this.Port = 80
+	if v.Port == 0 {
+		v.Port = 80
 	}
-	reporter.log("port - %v", this.Port)
+	reporter.log("port - %v", v.Port)
 
-	if this.Port != 80 {
-		this.Host = fmt.Sprintf("%s:%d", this.Host, this.Port)
+	if v.Port != 80 {
+		v.Host = fmt.Sprintf("%s:%d", v.Host, v.Port)
 	}
-	reporter.log("host - %v", this.Host)
+	reporter.log("host - %v", v.Host)
 
 	return nil
 }

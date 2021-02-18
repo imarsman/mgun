@@ -1,67 +1,70 @@
 package lib
 
 import (
-	"time"
-	"regexp"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strings"
+	"time"
 )
 
 var (
-	arrayParamRegexp = regexp.MustCompile(`[\w\d\-\_]\[\]+`)
+	arrayParamRegexp  = regexp.MustCompile(`[\w\d\-\_]\[\]+`)
 	configParamRegexp = regexp.MustCompile(`\$\{([\w\d\-\_\.]+)\}`)
-	gun = &Gun{
+	gun               = &Gun{
 		Features:   make(Features, 0),
 		Calibers:   make(CaliberMap),
 		Cartridges: make(Cartridges, 0),
 	}
 )
 
+// Gun collection of parameters for a call
 type Gun struct {
 	Features   Features   `yaml:"headers"`
 	Calibers   CaliberMap `yaml:"params"`
 	Cartridges Cartridges `yaml:"requests"`
 }
 
+// GetGun collection of definitions of hits to be made
 func GetGun() *Gun {
 	return gun
 }
 
-func (this *Gun) prepare() {
-	if len(this.Cartridges) == 0 {
+func (g *Gun) prepare() {
+	if len(g.Cartridges) == 0 {
 		cartridge := new(Cartridge)
 		cartridge.path = NewNamedDescribedFeature(GET_METHOD, "/")
-		this.Cartridges = append(this.Cartridges, cartridge)
+		g.Cartridges = append(g.Cartridges, cartridge)
 	}
-	reporter.log("cartridges count - %v", this.Cartridges)
+	reporter.log("cartridges count - %v", g.Cartridges)
 }
 
-func (this *Gun) findCaliber(path string) *Caliber {
+// findCaliber check a call
+func (g *Gun) findCaliber(path string) *Caliber {
 	parts := strings.Split(path, ".")
-	if caliber, ok := this.Calibers[parts[0]]; ok {
-		return this.findInCaliber(caliber, parts[1:])
-	} else {
-		return nil
+	if caliber, ok := g.Calibers[parts[0]]; ok {
+		return g.findInCaliber(caliber, parts[1:])
 	}
+	return nil
 }
 
-func (this *Gun) findInCaliber(caliber *Caliber, pathParts []string) *Caliber {
-	nextPathParts := this.getNextPathParts(pathParts)
+// findInCaliber get a random call from the list in the configuration
+func (g *Gun) findInCaliber(caliber *Caliber, pathParts []string) *Caliber {
+	nextPathParts := g.getNextPathParts(pathParts)
 	switch caliber.kind {
 	case CALIBER_KIND_LIST:
 		calibers := caliber.feature.description.(CaliberList)
 		rand.Seed(time.Now().UnixNano())
 		randCaliber := calibers[rand.Intn(len(calibers))]
 		if randCaliber.kind == CALIBER_KIND_MAP {
-			return this.findInCaliber(randCaliber, nextPathParts)
+			return g.findInCaliber(randCaliber, nextPathParts)
 		} else {
 			return randCaliber
 		}
 	case CALIBER_KIND_MAP:
 		caliberMap := caliber.feature.description.(CaliberMap)
 		if childCaliber, ok := caliberMap[pathParts[0]]; ok {
-			return this.findInCaliber(childCaliber, nextPathParts)
+			return g.findInCaliber(childCaliber, nextPathParts)
 		} else {
 			return nil
 		}
@@ -217,35 +220,35 @@ func (this *Cartridges) fill(rawCartridges []interface{}) {
 		}
 		for rawKey, rawValue := range rawCartridge.(map[interface{}]interface{}) {
 			key := rawKey.(string)
-			switch (key) {
+			switch key {
 			case GET_METHOD, POST_METHOD, PUT_METHOD, DELETE_METHOD:
 				kill.shotsCount++
 				cartridge.id = kill.shotsCount
 				cartridge.path = NewNamedDescribedFeature(key, rawValue)
 				cartridge.path.rawDescription = rawValue
-				break;
+				break
 			case RANDOM_METHOD, SYNC_METHOD:
 				cartridge.path = NewNamedFeature(key)
 				cartridge.children = make(Cartridges, 0)
 				cartridge.children.fill(rawValue.([]interface{}))
-				break;
+				break
 			case "headers":
 				cartridge.bulletFeatures = make(Features, 0)
 				cartridge.bulletFeatures.fill(rawValue.(map[interface{}]interface{}))
-				break;
+				break
 			case "params":
 				cartridge.chargeFeatures = make(Features, 0)
 				cartridge.chargeFeatures.fill(rawValue.(map[interface{}]interface{}))
-				break;
+				break
 			case "timeout":
 				cartridge.timeout = time.Duration(rawValue.(int))
-				break;
-//			case "successStatusCodes":
-//				cartridge.timeout = time.Duration(rawValue.(int))
-//				break;
-//			case "failedStatusCodes":
-//				cartridge.timeout = time.Duration(rawValue.(int))
-//				break;
+				break
+				//			case "successStatusCodes":
+				//				cartridge.timeout = time.Duration(rawValue.(int))
+				//				break;
+				//			case "failedStatusCodes":
+				//				cartridge.timeout = time.Duration(rawValue.(int))
+				//				break;
 			}
 		}
 		*this = append(*this, cartridge)
@@ -260,7 +263,7 @@ func (this *Cartridges) fill(rawCartridges []interface{}) {
 	}
 }
 
-func (this *Cartridges) getCodes(rawCodes interface{}) []int {
+func (c *Cartridges) getCodes(rawCodes interface{}) []int {
 	switch rawCodes.(type) {
 	case []interface{}:
 		codes := make([]int, 0)
@@ -273,9 +276,9 @@ func (this *Cartridges) getCodes(rawCodes interface{}) []int {
 	}
 }
 
-func (this Cartridges) toPlainSlice() Cartridges {
+func (c Cartridges) toPlainSlice() Cartridges {
 	cartridges := make(Cartridges, 0)
-	for _, cartridge := range this {
+	for _, cartridge := range c {
 		if cartridge.path.name == RANDOM_METHOD || cartridge.path.name == SYNC_METHOD {
 			cartridges = append(cartridges, cartridge.children.toPlainSlice()...)
 		} else {
@@ -291,7 +294,7 @@ const (
 	PUT_METHOD     = "PUT"
 	DELETE_METHOD  = "DELETE"
 	RANDOM_METHOD  = "RANDOM"
- 	SYNC_METHOD    = "SYNC"
+	SYNC_METHOD    = "SYNC"
 	INCLUDE_METHOD = "INCLUDE"
 )
 
@@ -306,25 +309,25 @@ type Cartridge struct {
 	children           Cartridges
 }
 
-func (this *Cartridge) getMethod() string {
-	return this.path.name
+func (c *Cartridge) getMethod() string {
+	return c.path.name
 }
 
-func (this *Cartridge) getPathAsString(killer *Killer) string {
-	return this.path.String(killer)
+func (c *Cartridge) getPathAsString(killer *Killer) string {
+	return c.path.String(killer)
 }
 
-func (this *Cartridge) getChildren() Cartridges {
-	if this.path.name == RANDOM_METHOD {
-		shuffleChildren := make(Cartridges, len(this.children))
+func (c *Cartridge) getChildren() Cartridges {
+	if c.path.name == RANDOM_METHOD {
+		shuffleChildren := make(Cartridges, len(c.children))
 		rand.Seed(time.Now().UnixNano())
-		indexes := rand.Perm(len(this.children))
+		indexes := rand.Perm(len(c.children))
 		for i, v := range indexes {
-			shuffleChildren[v] = this.children[i]
+			shuffleChildren[v] = c.children[i]
 		}
 		return shuffleChildren
-	} else if this.path.name == SYNC_METHOD {
-		return this.children
+	} else if c.path.name == SYNC_METHOD {
+		return c.children
 	} else {
 		return Cartridges{}
 	}
@@ -339,20 +342,20 @@ const (
 
 type Features []*Feature
 
-func (this *Features) UnmarshalYAML(unmarshal func(yaml interface{}) error) error {
+func (f *Features) UnmarshalYAML(unmarshal func(yaml interface{}) error) error {
 	rawFeatures := make(map[interface{}]interface{})
 	err := unmarshal(&rawFeatures)
 
-	this.fill(rawFeatures)
+	f.fill(rawFeatures)
 
 	return err
 }
 
-func (this *Features) fill(rawFeatures map[interface{}]interface{}) {
+func (f *Features) fill(rawFeatures map[interface{}]interface{}) {
 	for rawKey, rawValue := range rawFeatures {
 		key := rawKey.(string)
 		value := fmt.Sprintf("%v", rawValue)
-		*this = append(*this, NewNamedDescribedFeature(key, value))
+		*f = append(*f, NewNamedDescribedFeature(key, value))
 	}
 }
 
@@ -382,59 +385,58 @@ func NewNamedDescribedFeature(name string, rawDescription interface{}) *Feature 
 	return NewNamedFeature(name).setDescription(rawDescription)
 }
 
-func (this *Feature) setDescription(rawDescription interface{}) *Feature {
+func (f *Feature) setDescription(rawDescription interface{}) *Feature {
 	switch rawDescription.(type) {
 	case string:
 		description := rawDescription.(string)
 		if configParamRegexp.MatchString(description) {
-			this.description = configParamRegexp.ReplaceAllString(description, "%v")
-			this.units = make([]string, 0)
+			f.description = configParamRegexp.ReplaceAllString(description, "%v")
+			f.units = make([]string, 0)
 			for _, submatches := range configParamRegexp.FindAllStringSubmatch(description, -1) {
 				if len(submatches) >= 2 {
-					this.units = append(this.units, submatches[1])
+					f.units = append(f.units, submatches[1])
 				}
 			}
-			this.kind = FEATURE_KIND_MULTIPLE
+			f.kind = FEATURE_KIND_MULTIPLE
 		} else {
-			this.setSimpleDescription(description)
+			f.setSimpleDescription(description)
 		}
 		break
 	default:
-		this.setSimpleDescription(rawDescription)
+		f.setSimpleDescription(rawDescription)
 		break
 	}
-	return this
+	return f
 }
 
-func (this *Feature) setSimpleDescription(description interface{}) *Feature {
-	this.description = description
-	this.kind = FEATURE_KIND_SIMPLE
-	return this
+func (f *Feature) setSimpleDescription(description interface{}) *Feature {
+	f.description = description
+	f.kind = FEATURE_KIND_SIMPLE
+	return f
 }
 
-func (this *Feature) String(killer *Killer) string {
-	if this.kind == FEATURE_KIND_SIMPLE {
-		return fmt.Sprintf("%v", this.description)
-	} else {
-		values := make([]interface{}, len(this.units))
-		for i, unit := range this.units {
-			reporter.log("find caliber by unit - %v", unit)
-			caliber := gun.findCaliber(unit)
-			if caliber != nil && caliber.kind == CALIBER_KIND_SESSION {
-				if killer.session == nil {
-					calibers := caliber.feature.description.(CaliberList)
-					rand.Seed(time.Now().UnixNano())
-					killer.session = calibers[rand.Intn(len(calibers))]
-				}
-				caliber = gun.findInCaliber(
-					killer.session,
-					gun.getNextPathParts(strings.Split(unit, ".")),
-				)
-			}
-			if caliber != nil {
-				values[i] = caliber.feature.String(killer)
-			}
-		}
-		return fmt.Sprintf(this.description.(string), values...)
+func (f *Feature) String(killer *Killer) string {
+	if f.kind == FEATURE_KIND_SIMPLE {
+		return fmt.Sprintf("%v", f.description)
 	}
+	values := make([]interface{}, len(f.units))
+	for i, unit := range f.units {
+		reporter.log("find caliber by unit - %v", unit)
+		caliber := gun.findCaliber(unit)
+		if caliber != nil && caliber.kind == CALIBER_KIND_SESSION {
+			if killer.session == nil {
+				calibers := caliber.feature.description.(CaliberList)
+				rand.Seed(time.Now().UnixNano())
+				killer.session = calibers[rand.Intn(len(calibers))]
+			}
+			caliber = gun.findInCaliber(
+				killer.session,
+				gun.getNextPathParts(strings.Split(unit, ".")),
+			)
+		}
+		if caliber != nil {
+			values[i] = caliber.feature.String(killer)
+		}
+	}
+	return fmt.Sprintf(f.description.(string), values...)
 }

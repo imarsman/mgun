@@ -1,26 +1,26 @@
-# кол-во конкуретных сессий пользователей, необязательный параметр, по умолчанию 1
+# number of concurrent user sessions, optional parameter, default 1
 concurrency: 1000
 
-# кол-во повторений сценария, необязательный параметр, по умолчанию 1
+# number of script repetitions, optional parameter, default 1
 loopCount: 10
 
-# время ожидания ответа от сервера, необязательный параметр, по умолчанию 2 секунды
+# time to wait for a response from the server, optional parameter, by default 2 seconds
 timeout: 5
 
-# сетевой протокол http или https, необязательный параметр, по умолчанию http
+# network protocol http or https, optional parameter, default http
 scheme: https
 
-# доменное имя хоста или IP-адрес, обязательный параметр
+# domain hostname or IP address, required parameter
 host: example.com
 
-# порт хоста для подключения, необязательный параметр, по умолчанию 80
+# host port for connection, optional parameter, default 80
 port: 8080
 
-# переменные могут быть использованы в заголовке, переменной запроса
+# variables can be used in header, request variable
 params:
-  # обычные переменные выбираются для каждого запроса и никак не взаимосвязаны
+  # regular variables are selected for each request and are not related in any way
   search:
-    # если значением является перечисление, тогда в запрос подставится одно из значений перечесления
+    # if the value is an enumeration, then one of the enumeration values ​​will be substituted into the request
     languages: [php, java, c++, c, go, golang, js]
     structures: [for, while, class, if, else, case]
   agent:
@@ -30,7 +30,7 @@ params:
     - Mozilla/5.0 (Windows NT 5.1; rv:31.0) Gecko/20100101 Firefox/31.0
   say: hello world
 
-  # группа сессионных переменых(login, password, friendIds) будет использована для всех запросов конкурентной сессии
+  # global headers to be inserted in every script request, optional parameter
   session:
     - login: user1
       password: password1
@@ -46,7 +46,7 @@ headers:
   User-Agent: ${agent}
   X-Key-1: Value-1
 
-# последовательность запросов, которые необходимо выполнить, необязательный параметр, если запросы не указаны, то программа выполнит GET запрос на главную страницу
+# timeout for a response from the server of this request, optional parameter, by default the global timeout will be used
 requests:
 
   # GET|POST|PUT|DELETE: /path?query - стандартные запросы
@@ -54,23 +54,23 @@ requests:
   - GET: /index
 
   - POST: /signin
-    # необязательные POST параметры
+    # optional POST parameters
     params:
       login: ${session.login}
       password: ${session.password}
-    # время ожидания ответа от сервера этого запроса, необязательный параметр, по умолчанию будет использован глобальный таймаут
+    # timeout for a response from the server of this request, optional parameter, by default the global timeout will be used
     timeout: 10
 
   - GET: /profile
-    # заголовки этого запроса, необязательный параметр
+    # this request headers, optional
     headers:
-      # перезапишет значение глобального заголовка на локальное
+      # will overwrite the value of the global header to local
       X-Key-1: New-Value-1
       X-Key-2: Value-2
 
-  # RANDOM|SYNC - группы запросов
+  # RANDOM | SYNC - request groups
 
-  # RANDOM - в этой группе запросы выполнятся в поизвольном порядке произвольное количество раз(какой то запрос может выполнится несколько раз, а какой то не выполнится вообще)
+  # RANDOM - in this group, requests will be executed in an arbitrary order an arbitrary number of times (some request may be executed several times, and some will not be executed at all)
   - RANDOM:
     - GET: /some/path?query=1
     - GET: /some/path/2?query=12
@@ -87,7 +87,7 @@ requests:
       headers:
           Content-type: application/json
 
-    # SYNC - в этой группе выполнятся все запросы в том порядке, в котором заданы. SYNC может находится как внутри RANDOM, так и во вне ее
+    # SYNC - in this group all requests will be executed in the order in which they are specified. SYNC can be both inside and outside RANDOM.
     - SYNC:
       - GET: /some/path?query=2
       - GET: /some/path/3?query=123
