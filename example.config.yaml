@@ -2,7 +2,7 @@
 concurrency: 1000
 
 # number of script repetitions, optional parameter, default 1
-loopCount: 10
+loopcount: 10
 
 # time to wait for a response from the server, optional parameter, by default 2 seconds
 timeout: 5

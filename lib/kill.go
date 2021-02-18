@@ -30,7 +30,7 @@ var (
 type Kill struct {
 	shotsCount    int
 	GunsCount     int           `yaml:"concurrency"`
-	AttemptsCount int           `yaml:"loopCount"`
+	AttemptsCount int           `yaml:"loopcount"`
 	Timeout       time.Duration `yaml:"timeout"`
 	Rate          int           `yaml:"ratepersecond"`
 	gun           *Gun

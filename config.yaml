@@ -1,7 +1,7 @@
 concurrency: 1000
 #concurrency: 100
-#loopCount: 500
-loopCount: 10
+#loopcount: 500
+loopcount: 10
 scheme: https
 host: binatex.com
 #host: xa.us.to
