@@ -1,2 +1,6 @@
 .idea
 vendor
+build/builds/*
+build/mgun/*
+cmd/mgun/.appbuildts
+cmd/mgun/.appbuildversion

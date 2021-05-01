@@ -6,12 +6,18 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"runtime"
 
-	"github.com/imarsman/mgun/cmd/mgun/internal/build"
 	"github.com/imarsman/mgun/cmd/mgun/internal/lib"
 	"github.com/imarsman/mgun/cmd/mgun/internal/opt"
 	yaml "gopkg.in/yaml.v2"
 )
+
+//go:embed .appbuildversion
+var buildVersion string
+
+//go:embed .appbuildts
+var buildTS string
 
 // Embed example config file in buiild for use in help output
 // This requires Go 1.16 or above
@@ -39,10 +45,10 @@ func main() {
 
 	// A simple function to print the build information
 	var buildinfo = func() {
-		fmt.Printf("Version........%-18s\n", build.Version)
-		fmt.Printf("Platform.......%-18s\n", build.Platform)
-		fmt.Printf("Architecture...%-18s\n", build.Architecture)
-		fmt.Printf("Build..........%-18s\n", build.Build)
+		fmt.Printf("Version........%-18s\n", buildVersion)
+		fmt.Printf("Platform.......%-18s\n", runtime.GOOS)
+		fmt.Printf("Architecture...%-18s\n", runtime.GOARCH)
+		fmt.Printf("Build..........%-18s\n", buildTS)
 		fmt.Println("")
 	}
 

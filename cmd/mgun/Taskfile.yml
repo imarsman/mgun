@@ -1,0 +1,122 @@
+version: 3
+
+# This is a taks file for the taskfile build tool
+# See https://taskfile.dev/#/
+# It does the same thing you can do with a Makefile but with a syntax familiar
+# to the gitlab-ci.yml file.
+
+# This build file is tailored for a Golang project with a
+# project_root/cmd/appname/Taskfile.yml and
+# project_root/build/appname and
+# project_root/build/builds/appname layout.
+# More can be done to do things like put builds in a bin directory and add a
+# sibling config and log directory and other resources and to package that up in
+# a build. One could also use this to build a binary then build a Docker file to
+# hold the build.
+
+vars:
+  WD:
+    sh: pwd
+  APP_DIR: "{{base .WD}}"
+  APP_NAME: "{{.APP_DIR}}"
+  ROOT_DIR:
+    sh: echo $(cd ../../ && pwd)
+  BUILD_DIR:
+    sh: echo $(cd {{.ROOT_DIR}}/build/ && pwd)
+  # Get app builds dir
+  # Assuming {{.ROOT_DIR}}/build/builds/{{.APP_NAME}}
+  APP_BUILDS_DIR:
+    sh: echo $(cd {{.BUILD_DIR}}/{{.APP_NAME}} && pwd)
+  # NAMESPACE is specific to Golang projects with modules.
+  NAMESPACE: 
+    sh: cat {{.ROOT_DIR}}/go.mod |head -1|cut -d ' ' -f2
+  # Get the git version for this repostitory
+  VERSION: 
+    sh: git rev-list --count HEAD
+  # Get the build timestamp in UTC using template functionality from taskfile
+  BUILD_TS: '{{dateInZone "2006-01-02T15:04:05Z" (now) "UTC"}}'
+  # Get the build date in UTC using the template functionality from taskfile
+  BUILD_DATE: '{{dateInZone "2006-01-02" (now) "UTC"}}'
+
+tasks:
+  clean:
+    desc: Clean up and prepare prior to build
+    cmds: 
+      - find {{.BUILD_DIR}}/{{.APP_NAME}}/ -type f -exec rm {} \;
+
+  # Platform and architecture can be determined programmatically
+  update-version-info:
+    desc: Update version information in files
+    cmds:
+      - printf "{{.VERSION}}" >.appbuildversion
+      - printf "{{.BUILD_TS}}" >.appbuildts
+
+  build:
+    desc: Build OS version for ARCHITECTURE architecture
+    cmds:
+      - task: update-version-info
+      - GOOS={{.OS}} GOARCH={{.ARCHITECTURE}} go build -o {{.BUILD_DIR}}/{{.APP_NAME}}/{{.APP_NAME}}_{{.OS_NAME}}_{{.ARCHITECTURE}}
+      - chmod 755 {{.BUILD_DIR}}/{{.APP_NAME}}/{{.APP_NAME}}_{{.OS_NAME}}_{{.ARCHITECTURE}}
+
+  build-all:
+    desc: Build the application
+    cmds:
+      - task: update-version-info
+      - task: build-windows-amd64
+      - task: build-linux-amd64
+      - task: build-linux-arm64
+      - task: build-mac-amd64
+      - task: build-mac-arm64
+      - task: package
+      - task: clean  
+
+  build-windows-amd64:
+    desc: Build Windows amd64
+    cmds:
+      - task: build
+        vars: {OS: windows, ARCHITECTURE: amd64, OS_NAME: win}
+
+  build-linux-amd64:
+    desc: Build linux amd64
+    cmds:
+      - task: build
+        vars: {OS: linux, ARCHITECTURE: amd64, OS_NAME: lin}
+
+  build-linux-arm64:
+    desc: build linux arm64
+    cmds:
+      - task: build
+        vars: {OS: linux, ARCHITECTURE: arm64, OS_NAME: lin}
+  
+  build-mac-amd64:
+    desc: build mac amd64
+    cmds:
+      - task: build
+        vars: {OS: darwin, ARCHITECTURE: amd64, OS_NAME: mac}
+
+  build-mac-arm64:
+    desc: build mac arm64
+    cmds:
+      - task: build
+        vars: {OS: darwin, ARCHITECTURE: arm64, OS_NAME: mac}
+
+  package:
+    desc: tar gzip and zip the builds and move them to the builds dir
+    dir: "{{.BUILD_DIR}}"
+    cmds:
+      - tar -zcf {{.APP_NAME}}-{{.BUILD_DATE}}.tar.gz ./{{.APP_NAME}}
+      - mv {{.BUILD_DIR}}/{{.APP_NAME}}-{{.BUILD_DATE}}.tar.gz {{.APP_BUILDS_DIR}}/
+      - zip {{.APP_NAME}}-{{.BUILD_DATE}}.zip -r ./{{.APP_NAME}}
+      - mv {{.BUILD_DIR}}/{{.APP_NAME}}-{{.BUILD_DATE}}.zip {{.APP_BUILDS_DIR}}/
+
+  info:
+    desc: Print out variables gathered for debugging
+    cmds:
+      - echo 'APP DIR {{.APP_DIR}}'
+      - echo 'APP_NAME {{.APP_NAME}}'
+      - echo 'ROOT_DIR {{.ROOT_DIR}}'
+      - echo 'BUILD_DIR {{.BUILD_DIR}}'
+      - echo 'APP_BUILDS_DIR {{.APP_BUILDS_DIR}}'
+      - echo 'NAMESPACE {{.NAMESPACE}}'
+      - echo 'VERSION {{.VERSION}}'
+      - echo 'BUILD_TS {{.BUILD_TS}}'
