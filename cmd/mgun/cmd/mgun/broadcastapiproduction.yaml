@@ -1,0 +1,33 @@
+# The number of concurrent request processes
+concurrency: 2
+
+# Number of loops to run. The total numbero of calls will be
+# loopcount * concurrency * number of urls
+loopcount: 1
+
+# No matter how high the concurrency a value for ratepersecond will force limit
+ratepersecond: 4
+
+# Delay each call by a random number of milliseconds up to maxiumum
+randomdelayms: 0
+
+# http or https
+scheme: https
+
+# The host to query
+host: production-alt.bbc2.xmlteam.com
+
+# Client timeout in seconds
+timeout: 30
+
+# If -o parameter is given that will be used instead.
+# output: report.txt
+
+requests:
+  - RANDOM:
+    - GET: /soccer/l.uefa.europa.qualifying/schedule?start=P0D&end=U365D&usr=xts
+    - GET: /soccer/event-actions?date=2021-02-24&count=5&usr=xts
+    - GET: /soccer/l.scotprem.com/schedule?date=2021-02-24&usr=xts
+    - GET: /soccer/event-actions?date=2021-02-24&count=5&usr=xts
+    - GET: /soccer/event-actions-with-deleted?count=100&usr=xts&date=2021-02-24
+

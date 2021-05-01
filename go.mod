@@ -1,13 +1,13 @@
 module github.com/imarsman/mgun
 
-go 1.14
+go 1.16
 
 require (
 	github.com/buger/goterm v0.0.0-20200322175922-2f3e71b85129
 	github.com/cheggaaa/pb v2.0.7+incompatible
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548
 	github.com/dustin/go-humanize v1.0.0
-	github.com/mattn/go-colorable v0.1.6 // indirect
+	github.com/fatih/color v1.10.0
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
 	github.com/uber-go/ratelimit v0.1.0 // indirect
 	go.uber.org/ratelimit v0.1.1-0.20210125012240-296e9dcf0255
