@@ -1,34 +1,34 @@
-# M(achine)gun
+# M (achine) gun
 
-**Mgun** - это инструмент тестирования нагрузки HTTP сервера.
+** Mgun ** is an HTTP server load testing tool.
 
-Mgun создает заданное количество параллельных конкурентных сессий, затем выполняет HTTP запросы и аггрегирует результаты в таблицу.
-Параллелизм зависит от количества ядер процессора, чем больше ядер, тем выше параллелизм выполнения HTTP запросов.
+Mgun creates a specified number of concurrent concurrent sessions, then executes HTTP requests and aggregates the results into a table.
+Parallelism depends on the number of processor cores; the more cores, the higher the parallelism of HTTP requests.
 
-Mgun позволяет создавать GET, POST, PUT, DELETE запросы.
+Mgun allows you to create GET, POST, PUT, DELETE requests.
 
-Принципиальное отличие mgun от других инструментов тестирования нагрузки в том,
-что он позволяет создать сценарий из произвольного количества запросов, имитируя реальное поведение пользователя.
-Например, сценарий может иметь вид:
+The fundamental difference between mgun and other load testing tools is that
+that it allows you to create a script from an arbitrary number of requests, simulating real user behavior.
+For example, a script might look like:
 
-1. Зайти на главную страницу сайта
-2. Авторизоваться
-3. Зайти в личный кабинет
-4. Изменить данные о себе
-5. Выйти
+1. Go to the main page of the site
+2. Log in
+3. Log into your personal account
+4. Change information about yourself
+5. Log out
 
-Запросы в таком сценарии будут выполняться последовательно, как если бы это делал пользователь.
+Requests in such a script will be executed sequentially as if the user were doing it.
 
-Для создания сценариев используется конфигурационный файл в формате YAML.
+A configuration file in YAML format is used to create scripts.
 
-Кроме последовательности запросов в конфигурационном файле можно указать таймаут и заголовки.
-Таймаут и заголовки могут быть, как глобальными для всех запросов, так и частными у каждого запроса.
+In addition to the sequence of requests, you can specify the timeout and headers in the configuration file.
+Timeout and headers can be either global for all requests, or private for each request.
 
-# Быстрый старт
+# Fast start
 
-Mgun написан на Go, поэтому для начала необходимо [установить Go](http://golang.org/doc/install).
+Mgun is written in Go, so you need to [install Go] (http://golang.org/doc/install) first.
 
-### Загрузка и установка из исходников
+### Download and install from source
 
     cd /path/to/gopath
     export GOPATH=/path/to/gopath/
@@ -36,7 +36,7 @@ Mgun написан на Go, поэтому для начала необходи
     go get github.com/byorty/mgun
     go install src/github.com/byorty/mgun/mgun.go
 
-### Запуск
+### Launch
 
     ./bin/mgun -f example/config.yaml
 
