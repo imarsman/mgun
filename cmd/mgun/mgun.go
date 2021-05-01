@@ -13,14 +13,15 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-//go:embed .appbuildversion
-var buildVersion string
+// Embed example config file plus build info in buiild for use in help output
+// This requires Go 1.16 or above
 
 //go:embed .appbuildts
 var buildTS string
 
-// Embed example config file in buiild for use in help output
-// This requires Go 1.16 or above
+//go:embed .appbuildversion
+var buildVersion string
+
 //go:embed internal/assets/example.config.yaml
 var readme string
 
